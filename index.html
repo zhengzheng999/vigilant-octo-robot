@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>驾考题库搜索引擎</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    
+    <script>
+        // 驾考题库数据 - 初始数据
+        let examData = [
+            {
+                "id": 1,
+                "type": "判断题",
+                "content": "（判断题）在高速公路上长时间骑轧车行道分界线行驶，会同时占用两个车道，导致后方车辆行驶困难，易引发交通事故。",
+                "answer": "正确",
+                "image_id": "traffic_safety",
+                "image_url": "https://picsum.photos/id/1071/600/400"
+            },
+            {
+                "id": 2,
+                "type": "单选题",
+                "content": "（单选题）驾驶机动车在下坡路段制动突然失效，以下做法正确的是什么？",
+                "answer": "可利用避险车道减速停车",
+                "image_id": "braking_system",
+                "image_url": "https://picsum.photos/id/1072/600/400"
+            },
+            {
+                "id": 3,
+                "type": "判断题",
+                "content": "（判断题）如图所示，在铁路道口遇到两个红灯交替闪烁时，确认安全后可通过。",
+                "answer": "错误",
+                "image_id": "railway_crossing",
+                "image_url": "https://picsum.photos/id/1073/600/400"
+            },
+            {
+                "id": 4,
+                "type": "判断题",
+                "content": "（判断题）你在夜间驾车时，应谨慎选择行驶速度，以便能够在灯光有限的范围内及时发现情况，保证行车安全。",
+                "answer": "正确",
+                "image_id": "night_driving",
+                "image_url": "https://picsum.photos/id/1074/600/400"
+            },
+            {
+                "id": 5,
+                "type": "判断题",
+                "content": "（判断题）在道路上发生交通事故，仅造成轻微财产损失，并且基本事实清楚的，当事人应当先撤离现场再进行协商处理。",
+                "answer": "正确",
+                "image_id": "traffic_accident",
+                "image_url": "https://picsum.photos/id/1075/600/400"
+            },
+            {
+                "id": 6,
+                "type": "判断题",
+                "content": "（判断题）车辆在高速公路上发生故障时，应在来车方向50-100米处设置警告标志。",
+                "answer": "错误",
+                "image_id": "highway_emergency",
+                "image_url": "https://picsum.photos/id/1076/600/400"
+            },
+            {
+                "id": 7,
+                "type": "判断题",
+                "content": "（判断题）如图所示，驾驶机动车在路口前遇黄灯亮时，应停车等待。",
+                "answer": "正确",
+                "image_id": "traffic_light",
+                "image_url": "https://picsum.photos/id/1077/600/400"
+            }
+        ];
+        
+        // 全局变量存储上传的图片数据
+        let uploadedImageData = null;
+
+        // 页面加载时从localStorage读取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedData = localStorage.getItem('examDatabase');
+            if (savedData) {
+                try {
+                    examData = JSON.parse(savedData);
+                } catch (e) {
+                    console.error('Failed to parse saved data', e);
+                }
+            }
+            
+            // 初始化搜索功能
+            initSearch();
+            
+            // 初始化添加题目模态框
+            initAddQuestionModal();
+            
+            // 初始化删除题目功能
+            initDeleteQuestion();
+            
+            // 初始化时清空结果容器
+            initResultsContainer();
+        });
+
+        // 初始化结果容器
+        function initResultsContainer() {
+            const resultsContainer = document.getElementById('resultsContainer');
+            resultsContainer.innerHTML = ''; // 清空内容
+        }
+
+        // 初始化搜索功能
+        function initSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const searchButton = document.getElementById('searchButton');
+            
+            // 搜索按钮点击事件
+            searchButton.addEventListener('click', function() {
+                performSearch();
+            });
+            
+            // 回车键触发搜索
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performSearch();
+                }
+            });
+        }
+
+        // 初始化删除题目功能
+        function initDeleteQuestion() {
+            const deleteButton = document.getElementById('deleteQuestionButton');
+            const deleteModal = document.getElementById('deleteQuestionModal');
+            const closeDeleteModal = document.getElementById('closeDeleteModal');
+            const confirmDeleteButton = document.getElementById('confirmDeleteButton');
+            const deleteQuestionId = document.getElementById('deleteQuestionId');
+            
+            // 打开删除模态框
+            deleteButton.addEventListener('click', function() {
+                // 获取所有题目ID并生成选项
+                populateDeleteOptions();
+                deleteModal.classList.remove('hidden');
+            });
+            
+            // 关闭删除模态框
+            closeDeleteModal.addEventListener('click', function() {
+                deleteModal.classList.add('hidden');
+            });
+            
+            // 点击模态框外部关闭
+            window.addEventListener('click', function(e) {
+                if (e.target === deleteModal) {
+                    deleteModal.classList.add('hidden');
+                }
+            });
+            
+            // 确认删除
+            confirmDeleteButton.addEventListener('click', function() {
+                const selectedId = deleteQuestionId.value;
+                if (selectedId) {
+                    deleteQuestionById(selectedId);
+                    deleteModal.classList.add('hidden');
+                } else {
+                    alert('请选择要删除的题目！');
+                }
+            });
+        }
+        
+        // 填充删除选项
+        function populateDeleteOptions() {
+            const deleteQuestionId = document.getElementById('deleteQuestionId');
+            deleteQuestionId.innerHTML = '<option value="">-- 选择要删除的题目 --</option>';
+            
+            examData.forEach(question => {
+                const option = document.createElement('option');
+                option.value = question.id;
+                option.textContent = `ID: ${question.id} - ${question.type} - ${question.content.substring(0, 30)}...`;
+                deleteQuestionId.appendChild(option);
+            });
+        }
+        
+        // 根据ID删除题目
+        function deleteQuestionById(id) {
+            const index = examData.findIndex(q => q.id == id);
+            if (index !== -1) {
+                examData.splice(index, 1);
+                
+                // 保存到localStorage
+                try {
+                    localStorage.setItem('examDatabase', JSON.stringify(examData));
+                } catch (e) {
+                    console.error('保存失败:', e);
+                    alert('删除失败！');
+                    return;
+                }
+                
+                showNotification('题目删除成功！');
+                
+                // 如果当前有搜索结果，重新搜索
+                const searchTerm = document.getElementById('searchInput').value.trim();
+                if (searchTerm) {
+                    performSearch();
+                }
+            }
+        }
+
+        // 执行搜索
+        function performSearch() {
+            const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+            const resultsContainer = document.getElementById('resultsContainer');
+            
+            if (!searchTerm) {
+                initResultsContainer(); // 搜索词为空时清空内容
+                return;
+            }
+            
+            // 搜索匹配
+            const matchedQuestions = examData.filter(question => {
+                return question.content.toLowerCase().includes(searchTerm) || 
+                       question.answer.toLowerCase().includes(searchTerm) ||
+                       question.type.toLowerCase().includes(searchTerm);
+            });
+            
+            displayResults(matchedQuestions, searchTerm);
+        }
+
+        // 显示搜索结果
+        function displayResults(questions, searchTerm) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            resultsContainer.innerHTML = '';
+            
+            if (questions.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="text-center py-10">
+                        <p class="text-gray-500">没有找到匹配的题目</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            questions.forEach(question => {
+                // 高亮搜索关键词
+                let highlightedContent = question.content;
+                let highlightedAnswer = question.answer;
+                
+                if (searchTerm) {
+                    const regex = new RegExp(searchTerm, 'gi');
+                    highlightedContent = question.content.replace(regex, match => `<span class="bg-yellow-200 px-1 rounded">${match}</span>`);
+                    highlightedAnswer = question.answer.replace(regex, match => `<span class="bg-yellow-200 px-1 rounded">${match}</span>`);
+                }
+                
+                // 使用上传的图片URL或默认图片
+                const imageUrl = question.image_url || `https://picsum.photos/id/${question.id + 1000}/600/400`;
+                
+                // 根据题目类型设置不同的颜色样式
+                let typeClass = '';
+                if (question.type === '判断题') {
+                    typeClass = 'bg-blue-100 text-blue-800';
+                } else if (question.type === '单选题') {
+                    typeClass = 'bg-green-100 text-green-800';
+                } else if (question.type === '多选题') {
+                    typeClass = 'bg-purple-100 text-purple-800';
+                }
+                
+                const questionCard = document.createElement('div');
+                questionCard.className = 'bg-white rounded-lg shadow-md p-6 mb-4 transform transition-all duration-300 hover:shadow-lg hover:-translate-y-1';
+                questionCard.innerHTML = `
+                    <div class="flex flex-col md:flex-row gap-6">
+                        <div class="md:w-2/7">
+                            <img src="${imageUrl}" alt="题目图片" class="w-full h-64 object-cover rounded-lg">
+                        </div>
+                        <div class="md:w-5/7">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="px-3 py-1 rounded-full text-sm font-medium ${typeClass}">
+                                    ${question.type}
+                                </span>
+                                <span class="text-gray-500 text-sm">ID: ${question.id}</span>
+                            </div>
+                            <div class="mb-12">
+                                <h3 class="text-lg font-semibold mb-2">题目：</h3>
+                                <p class="text-gray-700 leading-relaxed">${highlightedContent}</p>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-lg mt-12 border border-green-100">
+                                <h3 class="text-lg font-semibold mb-2 text-green-800">答案：</h3>
+                                <p class="text-gray-800 font-medium">${highlightedAnswer}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                resultsContainer.appendChild(questionCard);
+            });
+        }
+
+        // 初始化添加题目模态框
+        function initAddQuestionModal() {
+            const addButton = document.getElementById('addQuestionButton');
+            const modal = document.getElementById('addQuestionModal');
+            const closeButton = document.getElementById('closeModal');
+            const saveButton = document.getElementById('saveQuestion');
+            const imageUpload = document.getElementById('imageUpload');
+            const imagePreview = document.getElementById('imagePreview');
+            const uploadButton = document.getElementById('uploadButton');
+            
+            // 打开模态框
+            addButton.addEventListener('click', function() {
+                modal.classList.remove('hidden');
+                imagePreview.innerHTML = '<p class="text-gray-500 text-sm">未选择图片</p>';
+                uploadedImageData = null;
+                imageUpload.value = ''; // 重置文件输入
+            });
+            
+            // 关闭模态框
+            closeButton.addEventListener('click', function() {
+                modal.classList.add('hidden');
+                resetForm();
+            });
+            
+            // 点击模态框外部关闭
+            window.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                    resetForm();
+                }
+            });
+            
+            // 手动触发文件选择
+            uploadButton.addEventListener('click', function() {
+                imageUpload.click();
+            });
+            
+            // 图片上传预览
+            imageUpload.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // 验证文件类型
+                    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                    if (!allowedTypes.includes(file.type)) {
+                        alert('请上传有效的图片文件（JPG、PNG、GIF、WebP）');
+                        imageUpload.value = '';
+                        return;
+                    }
+                    
+                    // 验证文件大小（5MB）
+                    const maxSize = 5 * 1024 * 1024;
+                    if (file.size > maxSize) {
+                        alert('图片大小不能超过5MB');
+                        imageUpload.value = '';
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        uploadedImageData = e.target.result;
+                        imagePreview.innerHTML = `
+                            <div class="relative">
+                                <img src="${e.target.result}" alt="预览图片" class="w-full h-32 object-cover rounded">
+                                <button type="button" onclick="removeImage()" class="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600">
+                                    <i class="fas fa-times text-xs"></i>
+                                </button>
+                            </div>
+                            <p class="text-gray-500 text-xs mt-2">文件名: ${file.name} (${formatFileSize(file.size)})</p>
+                        `;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            // 保存新题目
+            saveButton.addEventListener('click', function() {
+                saveNewQuestion();
+            });
+        }
+        
+        // 移除图片
+        function removeImage() {
+            uploadedImageData = null;
+            document.getElementById('imageUpload').value = '';
+            document.getElementById('imagePreview').innerHTML = '<p class="text-gray-500 text-sm">未选择图片</p>';
+        }
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        // 保存新题目
+        function saveNewQuestion() {
+            const type = document.getElementById('questionType').value;
+            const content = document.getElementById('questionContent').value.trim();
+            const answer = document.getElementById('questionAnswer').value.trim();
+            
+            if (!content || !answer) {
+                alert('题目内容和答案不能为空！');
+                return;
+            }
+            
+            // 生成新ID
+            const newId = examData.length > 0 ? Math.max(...examData.map(q => q.id)) + 1 : 1;
+            
+            // 创建新题目对象
+            const newQuestion = {
+                id: newId,
+                type: type,
+                content: type === '判断题' ? `（判断题）${content}` : (type === '单选题' ? `（单选题）${content}` : `（多选题）${content}`),
+                answer: answer,
+                image_id: `custom_${newId}`,
+                image_url: uploadedImageData || `https://picsum.photos/id/${newId + 1000}/600/400`
+            };
+            
+            // 添加到数据库
+            examData.push(newQuestion);
+            
+            // 保存到localStorage
+            try {
+                localStorage.setItem('examDatabase', JSON.stringify(examData));
+            } catch (e) {
+                console.error('保存失败:', e);
+                alert('保存失败，可能是数据量过大！');
+                return;
+            }
+            
+            // 关闭模态框并重置表单
+            document.getElementById('addQuestionModal').classList.add('hidden');
+            resetForm();
+            
+            // 显示成功消息
+            showNotification('题目添加成功！');
+        }
+
+        // 重置表单
+        function resetForm() {
+            document.getElementById('questionForm').reset();
+            document.getElementById('imagePreview').innerHTML = '<p class="text-gray-500 text-sm">未选择图片</p>';
+            document.getElementById('imageUpload').value = '';
+            uploadedImageData = null;
+        }
+
+        // 显示通知
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.classList.remove('hidden');
+            
+            setTimeout(() => {
+                notification.classList.add('hidden');
+            }, 3000);
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <!-- 顶部导航 -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-car text-blue-600 text-2xl mr-3"></i>
+                    <h1 class="text-xl font-bold text-gray-900">驾考题库搜索引擎</h1>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="addQuestionButton" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center">
+                        <i class="fas fa-plus mr-2"></i>添加题目
+                    </button>
+                    <button id="deleteQuestionButton" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center">
+                        <i class="fas fa-minus mr-2"></i>删除题目
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 搜索区域 - 居中显示 -->
+    <div class="flex flex-col items-center justify-center py-12 px-4">
+        <div class="w-full max-w-4xl">
+            <div class="bg-white rounded-xl shadow-lg p-8 transform transition-all duration-300 hover:shadow-xl">
+                <div class="flex items-center justify-center mb-6">
+                    <i class="fas fa-search text-blue-600 text-3xl"></i>
+                    <h2 class="text-2xl font-bold text-gray-800 ml-3">驾考题目搜索</h2>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        placeholder="输入关键词搜索题目..." 
+                        class="flex-grow px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    >
+                    <button 
+                        id="searchButton" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors duration-200 flex items-center justify-center"
+                    >
+                        <i class="fas fa-search mr-2"></i>搜索
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 搜索结果区域 - 加宽 -->
+    <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-4 pb-12">
+        <div id="resultsContainer" class="space-y-4">
+            <!-- 初始状态为空 -->
+        </div>
+    </div>
+
+    <!-- 添加题目模态框 -->
+    <div id="addQuestionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 transform transition-all duration-300 scale-100">
+            <div class="flex justify-between items-center p-6 border-b">
+                <h3 class="text-xl font-bold text-gray-900">添加新题目</h3>
+                <button id="closeModal" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="questionForm" class="p-6">
+                <div class="mb-4">
+                    <label for="questionType" class="block text-sm font-medium text-gray-700 mb-1">题目类型</label>
+                    <select id="questionType" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="判断题">判断题</option>
+                        <option value="单选题">单选题</option>
+                        <option value="多选题">多选题</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="questionContent" class="block text-sm font-medium text-gray-700 mb-1">题目内容</label>
+                    <textarea 
+                        id="questionContent" 
+                        rows="4" 
+                        placeholder="请输入题目内容（不需要包含题型标识）" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    ></textarea>
+                </div>
+                <div class="mb-4">
+                    <label for="questionAnswer" class="block text-sm font-medium text-gray-700 mb-1">答案</label>
+                    <input 
+                        type="text" 
+                        id="questionAnswer" 
+                        placeholder="请输入答案（多选题请用逗号分隔）" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">题目图片</label>
+                    <!-- 改进的图片上传区域 -->
+                    <div class="flex flex-col gap-3">
+                        <button 
+                            type="button" 
+                            id="uploadButton" 
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 rounded-lg transition-colors duration-200 flex items-center justify-center"
+                        >
+                            <i class="fas fa-cloud-upload mr-2"></i>选择图片上传
+                        </button>
+                        <input id="imageUpload" type="file" accept="image/*" class="hidden" />
+                        <div id="imagePreview" class="min-h-[80px] flex items-center justify-center border border-dashed border-gray-200 rounded-lg p-4">
+                            <p class="text-gray-500 text-sm">未选择图片</p>
+                        </div>
+                        <p class="text-gray-500 text-xs">支持 JPG、PNG、GIF、WebP 格式，最大 5MB</p>
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button 
+                        type="button" 
+                        id="saveQuestion" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors duration-200"
+                    >
+                        保存题目
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 删除题目模态框 -->
+    <div id="deleteQuestionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 transform transition-all duration-300 scale-100">
+            <div class="flex justify-between items-center p-6 border-b">
+                <h3 class="text-xl font-bold text-gray-900">删除题目</h3>
+                <button id="closeDeleteModal" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label for="deleteQuestionId" class="block text-sm font-medium text-gray-700 mb-1">选择要删除的题目</label>
+                    <select id="deleteQuestionId" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                        <option value="">-- 选择要删除的题目 --</option>
+                    </select>
+                </div>
+                <div class="bg-red-50 p-4 rounded-lg mb-6">
+                    <p class="text-red-700 text-sm flex items-center">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        <strong>警告：</strong>删除操作不可恢复，请谨慎操作！
+                    </p>
+                </div>
+                <div class="flex justify-end">
+                    <button 
+                        type="button" 
+                        id="confirmDeleteButton" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors duration-200"
+                    >
+                        <i class="fas fa-trash mr-2"></i>确认删除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知提示 -->
+    <div id="notification" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg hidden z-50">
+        操作成功！
+    </div>
+</body>
+</html>
